@@ -448,3 +448,878 @@ class MyService @Autowired constructor(private val env: Environment) {
 6. **@Value("#{systemProperties['user.home']}")**：使用 SpEL 表达式获取系统属性 `user.home` 的值。
 
 通过上述示例，我们展示了如何在 Spring 应用中使用 SpEL 表达式来动态解析和评估属性值。这使得配置更加灵活和强大，能够处理更复杂的需求。
+
+# IOC基础-依赖注入-自动注入&复杂类型注入
+在 Spring 框架中，`@Autowired` 注解用于自动注入依赖，可以用于构造函数、属性、setter 方法和配置类中的 `@Bean` 方法。对于多个相同类型的 Bean，Spring 提供了 `@Qualifier` 注解来指定注入的 Bean 名称，以及 `@Primary` 注解来指定默认的 Bean。
+
+### 1. 使用 @Autowired 进行自动注入
+
+`@Autowired` 注解可以用于构造函数、属性和 setter 方法，来自动注入 Spring 容器中的 Bean。
+
+#### 示例
+
+```kotlin
+package com.example.project.service
+
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+
+@Service
+class UserService @Autowired constructor(private val userRepository: UserRepository) {
+    fun performService() {
+        println("Service performed with user: ${userRepository.getUser()}")
+    }
+}
+```
+
+### 2. 在配置类中使用 @Autowired 和 @Bean
+
+`@Autowired` 注解可以用于配置类中的 `@Bean` 方法，以便在创建 Bean 时注入依赖。
+
+#### 示例
+
+```kotlin
+package com.example.project.configuration
+
+import com.example.project.repository.UserRepository
+import com.example.project.service.UserService
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+
+@Configuration
+class AppConfig {
+
+    @Bean
+    fun userRepository(): UserRepository {
+        return UserRepository()
+    }
+
+    @Bean
+    fun userService(@Autowired userRepository: UserRepository): UserService {
+        return UserService(userRepository)
+    }
+}
+```
+
+### 3. 多个相同类型 Bean 的自动注入
+
+当存在多个相同类型的 Bean 时，可以使用 `@Qualifier` 注解来指定注入的 Bean 名称，或者使用 `@Primary` 注解来指定默认的 Bean。
+
+#### 示例
+
+**UserRepository.kt**
+
+```kotlin
+package com.example.project.repository
+
+import org.springframework.stereotype.Repository
+
+@Repository("primaryUserRepository")
+class PrimaryUserRepository : UserRepository {
+    override fun getUser(): String {
+        return "Primary User"
+    }
+}
+
+@Repository("secondaryUserRepository")
+class SecondaryUserRepository : UserRepository {
+    override fun getUser(): String {
+        return "Secondary User"
+    }
+}
+
+interface UserRepository {
+    fun getUser(): String
+}
+```
+
+**UserService.kt**
+
+```kotlin
+package com.example.project.service
+
+import com.example.project.repository.UserRepository
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.stereotype.Service
+
+@Service
+class UserService {
+
+    @Autowired
+    @Qualifier("primaryUserRepository")
+    lateinit var userRepository: UserRepository
+
+    fun performService() {
+        println("Service performed with user: ${userRepository.getUser()}")
+    }
+}
+```
+
+**AppConfig.kt**
+
+```kotlin
+package com.example.project.configuration
+
+import com.example.project.repository.PrimaryUserRepository
+import com.example.project.repository.SecondaryUserRepository
+import com.example.project.service.UserService
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
+
+@Configuration
+class AppConfig {
+
+    @Bean
+    @Primary
+    fun primaryUserRepository(): PrimaryUserRepository {
+        return PrimaryUserRepository()
+    }
+
+    @Bean
+    fun secondaryUserRepository(): SecondaryUserRepository {
+        return SecondaryUserRepository()
+    }
+
+    @Bean
+    fun userService(): UserService {
+        return UserService()
+    }
+}
+```
+
+### 4. 使用 @Primary 注解指定默认的 Bean
+
+当有多个相同类型的 Bean 时，可以使用 `@Primary` 注解来指定其中一个为默认的 Bean。
+
+#### 示例
+
+```kotlin
+package com.example.project.repository
+
+import org.springframework.context.annotation.Primary
+import org.springframework.stereotype.Repository
+
+@Repository("primaryUserRepository")
+@Primary
+class PrimaryUserRepository : UserRepository {
+    override fun getUser(): String {
+        return "Primary User"
+    }
+}
+
+@Repository("secondaryUserRepository")
+class SecondaryUserRepository : UserRepository {
+    override fun getUser(): String {
+        return "Secondary User"
+    }
+}
+
+interface UserRepository {
+    fun getUser(): String
+}
+```
+
+**UserService.kt**
+
+```kotlin
+package com.example.project.service
+
+import com.example.project.repository.UserRepository
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+
+@Service
+class UserService @Autowired constructor(private val userRepository: UserRepository) {
+    fun performService() {
+        println("Service performed with user: ${userRepository.getUser()}")
+    }
+}
+```
+
+### 5. 使用 @Qualifier 指定特定的 Bean
+
+当需要指定特定的 Bean 时，可以使用 `@Qualifier` 注解。
+
+#### 示例
+
+```kotlin
+package com.example.project.service
+
+import com.example.project.repository.UserRepository
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.stereotype.Service
+
+@Service
+class UserService @Autowired constructor(
+    @Qualifier("secondaryUserRepository") private val userRepository: UserRepository
+) {
+    fun performService() {
+        println("Service performed with user: ${userRepository.getUser()}")
+    }
+}
+```
+
+### 6. 完整示例
+
+以下是一个完整的示例，展示了如何使用 `@Autowired`、`@Qualifier` 和 `@Primary` 来自动注入依赖。
+
+#### 项目结构
+
+```
+src
+└── main
+    ├── kotlin
+    │   └── com
+    │       └── example
+    │           └── project
+    │               ├── configuration
+    │               │   └── AppConfig.kt
+    │               ├── repository
+    │               │   ├── PrimaryUserRepository.kt
+    │               │   ├── SecondaryUserRepository.kt
+    │               │   └── UserRepository.kt
+    │               ├── service
+    │               │   └── UserService.kt
+    │               └── MainApp.kt
+    └── resources
+        └── application.properties
+```
+
+#### application.properties
+
+```properties
+# Application properties
+```
+
+#### AppConfig.kt
+
+```kotlin
+package com.example.project.configuration
+
+import com.example.project.repository.PrimaryUserRepository
+import com.example.project.repository.SecondaryUserRepository
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
+
+@Configuration
+class AppConfig {
+
+    @Bean
+    @Primary
+    fun primaryUserRepository(): PrimaryUserRepository {
+        return PrimaryUserRepository()
+    }
+
+    @Bean
+    fun secondaryUserRepository(): SecondaryUserRepository {
+        return SecondaryUserRepository()
+    }
+}
+```
+
+#### PrimaryUserRepository.kt
+
+```kotlin
+package com.example.project.repository
+
+import org.springframework.context.annotation.Primary
+import org.springframework.stereotype.Repository
+
+@Repository
+@Primary
+class PrimaryUserRepository : UserRepository {
+    override fun getUser(): String {
+        return "Primary User"
+    }
+}
+```
+
+#### SecondaryUserRepository.kt
+
+```kotlin
+package com.example.project.repository
+
+import org.springframework.stereotype.Repository
+
+@Repository
+class SecondaryUserRepository : UserRepository {
+    override fun getUser(): String {
+        return "Secondary User"
+    }
+}
+```
+
+#### UserRepository.kt
+
+```kotlin
+package com.example.project.repository
+
+interface UserRepository {
+    fun getUser(): String
+}
+```
+
+#### UserService.kt
+
+```kotlin
+package com.example.project.service
+
+import com.example.project.repository.UserRepository
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.stereotype.Service
+
+@Service
+class UserService @Autowired constructor(
+    @Qualifier("secondaryUserRepository") private val userRepository: UserRepository
+) {
+    fun performService() {
+        println("Service performed with user: ${userRepository.getUser()}")
+    }
+}
+```
+
+#### MainApp.kt
+
+```kotlin
+package com.example.project
+
+import com.example.project.service.UserService
+import org.springframework.context.ApplicationContext
+import org.springframework.context.annotation.AnnotationConfigApplicationContext
+
+fun main() {
+    val context: ApplicationContext = AnnotationConfigApplicationContext(AppConfig::class.java)
+    val userService: UserService = context.getBean(UserService::class.java)
+    userService.performService()
+}
+```
+
+运行 `MainApp.kt` 文件，你应该会看到如下输出：
+
+```
+Service performed with user: Secondary User
+```
+
+通过这种方式，你可以使用 `@Autowired`、`@Qualifier` 和 `@Primary` 注解来管理和注入多个相同类型的 Bean，从而灵活地控制依赖注入。
+
+## @Autowired注入的原理逻辑
+你的描述准确地解释了 `@Autowired` 注入的逻辑，当 Spring 容器遇到 `@Autowired` 注解时，它会按照以下步骤进行依赖注入：
+
+1. **类型匹配**：
+ - 首先，Spring 会根据属性的类型（或构造函数参数的类型）在 IoC 容器中查找相应类型的 bean。
+ - 如果找到唯一的一个 bean，Spring 会直接注入该 bean。
+ - 如果找到多个相同类型的 bean，Spring 进入下一步。
+
+2. **名称匹配**：
+ - 当找到多个相同类型的 bean 时，Spring 会将要注入的属性名（或构造函数参数名）与这些 bean 的 id 逐一对比。
+ - 如果有一个 bean 的 id 与属性名相同，Spring 会注入这个 bean。
+ - 如果没有任何 bean 的 id 与属性名相同，Spring 会抛出 `NoUniqueBeanDefinitionException` 异常。
+
+3. **处理冲突**：
+ - 使用 `@Qualifier` 注解可以指定具体要注入的 bean 名称。
+ - 使用 `@Primary` 注解可以指定一个默认的 bean，当存在多个相同类型的 bean 时，优先注入带有 `@Primary` 注解的 bean。
+
+
+## @Resource,@Inject,@Autowired
+在 Spring 框架中，`@Autowired`、`@Resource` 和 `@Inject` 是用于依赖注入的注解，虽然它们都用于注入依赖，但它们的工作方式和配置细节略有不同。下面详细介绍每个注解的功能、用法和区别。
+
+### 1. @Autowired
+
+`@Autowired` 是 Spring 提供的注解，用于自动装配依赖。
+
+- **按类型注入**：默认情况下，`@Autowired` 按类型进行注入。
+- **可选注入**：可以使用 `required` 属性来指示是否必须注入。
+- **使用场景**：可以用于构造函数、属性、setter 方法。
+
+#### 示例
+
+```kotlin
+package com.example.project.service
+
+import com.example.project.model.Person
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+
+@Service
+class PersonService @Autowired constructor(
+    private val person: Person
+) {
+    fun displayPerson() {
+        println("Person: ${person.getName()}")
+    }
+}
+```
+
+### 2. @Resource
+
+`@Resource` 是 JSR-250 提供的注解，通常用于将命名资源注入到 Java 应用中。
+
+- **按名称注入**：默认情况下，`@Resource` 按名称进行注入。
+- **支持类型注入**：如果找不到名称匹配的 bean，则会按类型进行匹配。
+- **使用场景**：可以用于属性和 setter 方法。
+
+#### 示例
+
+```kotlin
+package com.example.project.service
+
+import com.example.project.model.Person
+import javax.annotation.Resource
+import org.springframework.stereotype.Service
+
+@Service
+class PersonService {
+
+    @Resource(name = "teacher") // 按名称注入
+    private lateinit var person: Person
+
+    fun displayPerson() {
+        println("Person: ${person.getName()}")
+    }
+}
+```
+
+### 3. @Inject
+
+`@Inject` 是 JSR-330 提供的注解，由 Java 依赖注入规范定义。
+
+- **按类型注入**：默认情况下，`@Inject` 按类型进行注入。
+- **类似 @Autowired**：功能类似于 `@Autowired`，但没有 Spring 的 `required` 属性。
+- **使用场景**：可以用于构造函数、属性、setter 方法。
+
+#### 示例
+
+```kotlin
+package com.example.project.service
+
+import com.example.project.model.Person
+import javax.inject.Inject
+import org.springframework.stereotype.Service
+
+@Service
+class PersonService @Inject constructor(
+    private val person: Person
+) {
+    fun displayPerson() {
+        println("Person: ${person.getName()}")
+    }
+}
+```
+
+### 对比
+
+| 特性            | @Autowired                         | @Resource                           | @Inject                          |
+|-----------------|------------------------------------|-------------------------------------|----------------------------------|
+| 提供者          | Spring                              | JSR-250                             | JSR-330                          |
+| 注入类型        | 按类型（默认），可以结合 @Qualifier 按名称 | 按名称（默认），找不到则按类型注入     | 按类型                            |
+| 支持构造函数注入  | 是                                  | 否                                  | 是                                |
+| 支持属性注入      | 是                                  | 是                                  | 是                                |
+| 支持 setter 注入 | 是                                  | 是                                  | 是                                |
+| 可选属性          | required=false 可选                | 无                                  | 无                                |
+| 主要使用场景      | Spring 应用中的依赖注入             | Java EE 和 Spring 应用中的命名资源注入 | Java 依赖注入规范的依赖注入场景    |
+
+
+# IOC进阶-依赖注入-回调注入&延迟注入
+##  比较常用的几个回调接口
+当然可以！下面是一些常见场景，每个场景中展示了如何使用这些回调接口：
+
+### 1. `BeanFactoryAware` - 动态获取Bean实例
+
+场景：在运行时根据条件动态获取不同的Bean实例。
+
+```java
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
+import org.springframework.beans.BeansException;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyService implements BeanFactoryAware {
+    private BeanFactory beanFactory;
+
+    @Override
+    public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+        this.beanFactory = beanFactory;
+    }
+
+    public void performTask(String beanName) {
+        MyTask task = beanFactory.getBean(beanName, MyTask.class);
+        task.execute();
+    }
+}
+```
+
+### 2. `ApplicationContextAware` - 获取应用上下文中的环境变量
+
+场景：在Bean中需要访问Spring应用上下文提供的环境变量。
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.ApplicationContextException;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyComponent implements ApplicationContextAware {
+    private ApplicationContext applicationContext;
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws ApplicationContextException {
+        this.applicationContext = applicationContext;
+    }
+
+    public void printEnvironmentProperty() {
+        Environment environment = applicationContext.getEnvironment();
+        String property = environment.getProperty("my.property");
+        System.out.println("Property value: " + property);
+    }
+}
+```
+
+### 3. `EnvironmentAware` - 根据环境配置进行初始化
+
+场景：根据不同的环境变量进行不同的初始化操作。
+
+```java
+import org.springframework.context.EnvironmentAware;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyInitializer implements EnvironmentAware {
+    private Environment environment;
+
+    @Override
+    public void setEnvironment(Environment environment) {
+        this.environment = environment;
+    }
+
+    public void initialize() {
+        String profile = environment.getActiveProfiles()[0];
+        if ("development".equals(profile)) {
+            // 初始化开发环境
+        } else if ("production".equals(profile)) {
+            // 初始化生产环境
+        }
+    }
+}
+```
+
+### 4. `ApplicationEventPublisherAware` - 发布自定义事件
+
+场景：在某些操作后发布自定义事件，通知其他组件。
+
+```java
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.ApplicationEventPublisherAware;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyEventPublisher implements ApplicationEventPublisherAware {
+    private ApplicationEventPublisher eventPublisher;
+
+    @Override
+    public void setApplicationEventPublisher(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+    }
+
+    public void publishEvent() {
+        MyEvent event = new MyEvent(this);
+        eventPublisher.publishEvent(event);
+    }
+}
+
+public class MyEvent extends ApplicationEvent {
+    public MyEvent(Object source) {
+        super(source);
+    }
+}
+```
+
+### 5. `ResourceLoaderAware` - 加载外部资源文件
+
+场景：在Bean中加载和处理外部配置文件或资源。
+
+```java
+import org.springframework.context.ResourceLoaderAware;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+@Component
+public class MyResourceLoader implements ResourceLoaderAware {
+    private ResourceLoader resourceLoader;
+
+    @Override
+    public void setResourceLoader(ResourceLoader resourceLoader) {
+        this.resourceLoader = resourceLoader;
+    }
+
+    public void loadResource(String location) throws IOException {
+        Resource resource = resourceLoader.getResource(location);
+        String content = new String(Files.readAllBytes(Paths.get(resource.getURI())));
+        System.out.println("Resource content: " + content);
+    }
+}
+```
+
+### 6. `BeanClassLoaderAware` - 动态加载类
+
+场景：在运行时动态加载类进行操作。
+
+```java
+import org.springframework.beans.factory.BeanClassLoaderAware;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyClassLoader implements BeanClassLoaderAware {
+    private ClassLoader classLoader;
+
+    @Override
+    public void setBeanClassLoader(ClassLoader classLoader) {
+        this.classLoader = classLoader;
+    }
+
+    public void loadClass(String className) throws ClassNotFoundException {
+        Class<?> clazz = classLoader.loadClass(className);
+        System.out.println("Loaded class: " + clazz.getName());
+    }
+}
+```
+
+### 7. `BeanNameAware` - 获取Bean名称
+
+场景：在Bean中需要访问或记录其在Spring容器中的名称。
+
+```java
+import org.springframework.beans.factory.BeanNameAware;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyBean implements BeanNameAware {
+    private String beanName;
+
+    @Override
+    public void setBeanName(String beanName) {
+        this.beanName = beanName;
+    }
+
+    public void printBeanName() {
+        System.out.println("Bean name: " + beanName);
+    }
+}
+```
+
+这些示例展示了在实际应用中如何使用Spring的回调接口，使得Bean能够与Spring容器更好地集成和互动。
+
+## ObjectProvider
+在Spring框架中，`ObjectProvider`是一个强大的工具，用于处理依赖注入的懒加载和依赖管理。它提供了一种灵活的方法来获取和使用Spring Bean，同时支持可选依赖和按需实例化。
+
+### `ObjectProvider` 的主要功能
+
+1. **懒加载**：Bean只有在实际需要时才会被实例化。
+2. **可选依赖**：如果所请求的Bean不存在，`ObjectProvider`不会抛出异常，而是返回一个空的提供者。
+3. **多实例获取**：可以按需获取Bean的多个实例。
+
+### 使用场景
+
+#### 1. 懒加载Bean
+
+假设我们有一个`ExpensiveService`，它的实例化非常耗时。我们希望在需要时才加载它，而不是在应用启动时。
+
+```java
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Component;
+
+@Component
+public class ExpensiveService {
+    public ExpensiveService() {
+        System.out.println("ExpensiveService initialized!");
+    }
+
+    public void performTask() {
+        System.out.println("Performing task...");
+    }
+}
+
+@Component
+public class ServiceBean {
+    private final ObjectProvider<ExpensiveService> expensiveServiceProvider;
+
+    public ServiceBean(ObjectProvider<ExpensiveService> expensiveServiceProvider) {
+        this.expensiveServiceProvider = expensiveServiceProvider;
+    }
+
+    public void useExpensiveService() {
+        System.out.println("Using ExpensiveService...");
+        ExpensiveService expensiveService = expensiveServiceProvider.getObject();
+        expensiveService.performTask();
+    }
+}
+```
+
+在这个例子中，`ExpensiveService`只有在`useExpensiveService`方法被调用时才会被实例化。
+
+#### 2. 可选依赖
+
+如果某个Bean可能不存在，而我们不希望注入失败，可以使用`ObjectProvider`的`ifAvailable`方法。
+
+```java
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Component;
+
+@Component
+public class OptionalServiceUser {
+    private final ObjectProvider<OptionalService> optionalServiceProvider;
+
+    public OptionalServiceUser(ObjectProvider<OptionalService> optionalServiceProvider) {
+        this.optionalServiceProvider = optionalServiceProvider;
+    }
+
+    public void useOptionalService() {
+        optionalServiceProvider.ifAvailable(optionalService -> {
+            optionalService.performAction();
+        });
+    }
+}
+```
+
+如果`OptionalService`不存在，`useOptionalService`方法将不会执行任何操作。
+
+#### 3. 获取多个实例
+
+使用`ObjectProvider`可以按需获取Bean的多个实例。
+
+```java
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MultiServiceUser {
+    private final ObjectProvider<MyService> serviceProvider;
+
+    public MultiServiceUser(ObjectProvider<MyService> serviceProvider) {
+        this.serviceProvider = serviceProvider;
+    }
+
+    public void useAllServices() {
+        serviceProvider.stream().forEach(MyService::performAction);
+    }
+}
+```
+
+### 示例应用
+
+让我们将这些场景整合到一个示例应用中：
+
+```java
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
+
+@Component
+class MyService {
+    public void performAction() {
+        System.out.println("Action performed!");
+    }
+}
+
+@Component
+class OptionalService {
+    public void performAction() {
+        System.out.println("Optional Service Action performed!");
+    }
+}
+
+@Component
+class ExpensiveService {
+    public ExpensiveService() {
+        System.out.println("ExpensiveService initialized!");
+    }
+
+    public void performTask() {
+        System.out.println("Performing task...");
+    }
+}
+
+@Component
+class ServiceBean {
+    private final ObjectProvider<ExpensiveService> expensiveServiceProvider;
+
+    public ServiceBean(ObjectProvider<ExpensiveService> expensiveServiceProvider) {
+        this.expensiveServiceProvider = expensiveServiceProvider;
+    }
+
+    public void useExpensiveService() {
+        System.out.println("Using ExpensiveService...");
+        ExpensiveService expensiveService = expensiveServiceProvider.getObject();
+        expensiveService.performTask();
+    }
+}
+
+@Component
+class OptionalServiceUser {
+    private final ObjectProvider<OptionalService> optionalServiceProvider;
+
+    public OptionalServiceUser(ObjectProvider<OptionalService> optionalServiceProvider) {
+        this.optionalServiceProvider = optionalServiceProvider;
+    }
+
+    public void useOptionalService() {
+        optionalServiceProvider.ifAvailable(optionalService -> {
+            optionalService.performAction();
+        });
+    }
+}
+
+@Component
+class MultiServiceUser {
+    private final ObjectProvider<MyService> serviceProvider;
+
+    public MultiServiceUser(ObjectProvider<MyService> serviceProvider) {
+        this.serviceProvider = serviceProvider;
+    }
+
+    public void useAllServices() {
+        serviceProvider.stream().forEach(MyService::performAction);
+    }
+}
+
+@Configuration
+@ComponentScan
+class AppConfig {
+}
+
+public class MainApp {
+    public static void main(String[] args) {
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+
+        ServiceBean serviceBean = context.getBean(ServiceBean.class);
+        serviceBean.useExpensiveService();
+
+        OptionalServiceUser optionalServiceUser = context.getBean(OptionalServiceUser.class);
+        optionalServiceUser.useOptionalService();
+
+        MultiServiceUser multiServiceUser = context.getBean(MultiServiceUser.class);
+        multiServiceUser.useAllServices();
+
+        context.close();
+    }
+}
+```
+
+### 总结
+
+`ObjectProvider`是Spring框架中一个强大的工具，特别适用于需要延迟加载、可选依赖和多实例管理的场景。通过`ObjectProvider`，我们可以显著提高应用的灵活性和性能。
