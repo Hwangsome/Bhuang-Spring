@@ -1323,3 +1323,764 @@ public class MainApp {
 ### 总结
 
 `ObjectProvider`是Spring框架中一个强大的工具，特别适用于需要延迟加载、可选依赖和多实例管理的场景。通过`ObjectProvider`，我们可以显著提高应用的灵活性和性能。
+
+## 依赖注入的目的和优点？
+依赖注入（Dependency Injection，简称DI）是实现控制反转（Inversion of Control，简称IoC）的一种技术。它将对象的创建和依赖关系的管理从对象自身移交给外部容器（例如Spring容器），从而实现更松散的耦合和更高的可测试性。
+依赖注入作为 IOC 的实现方式之一，目的就是解耦，我们不再需要直接去 new 那些依赖的类对象（直接依赖会导致对象的创建机制、初始化过程难以统一控制）；而且，如果组件存在多级依赖，依赖注入可以将这些依赖的关系简化，开发者只需要定义好谁依赖谁即可。
+
+除此之外，依赖注入的另一个特点是依赖对象的可配置：通过 xml 或者注解声明，可以指定和调整组件注入的对象，借助 Java 的多态特性，可以不需要大批量的修改就完成依赖注入的对象替换（面向接口编程与依赖注入配合近乎完美）
+
+# IOC基础-Bean常见的几种类型与Bean的作用域
+在Spring Framework中，Bean的类型通常可以分为两种设计：普通Bean和工厂Bean。这两种设计方式各有其用途和适用场景。下面是对这两种Bean的详细说明和示例。
+
+### 普通 Bean
+
+普通Bean是最常见的Spring Bean类型，它代表一个标准的Java对象，Spring容器会管理其生命周期和依赖注入。
+
+#### 特点
+- 由Spring容器管理其生命周期。
+- 通常通过`@Component`、`@Service`、`@Repository`、`@Controller`等注解或在XML配置文件中定义。
+- 直接通过Spring容器获取和使用。
+
+#### 示例
+
+```java
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyBean {
+    public MyBean() {
+        System.out.println("MyBean instance created");
+    }
+
+    public void doSomething() {
+        System.out.println("Doing something...");
+    }
+}
+```
+
+配置和使用：
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@ComponentScan
+public class AppConfig {
+}
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        MyBean myBean = context.getBean(MyBean.class);
+        myBean.doSomething();
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
+```
+
+### 工厂 Bean
+
+工厂Bean（FactoryBean）是一种特殊的Bean，用于创建其他Bean的实例。通过实现`org.springframework.beans.factory.FactoryBean`接口，可以自定义Bean的创建逻辑。
+
+#### 特点
+- `FactoryBean`接口提供了灵活的Bean创建机制。
+- `FactoryBean`实例本身可以在容器中定义，但它生成的实际Bean是通过`getObject()`方法获取的。
+- 可以控制创建Bean的实例类型和实例化过程。
+- 有助于复杂Bean的创建过程，尤其是当Bean的构造需要复杂的初始化步骤时。
+
+#### 示例
+
+创建一个工厂Bean：
+
+```java
+import org.springframework.beans.factory.FactoryBean;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyFactoryBean implements FactoryBean<MyProduct> {
+    @Override
+    public MyProduct getObject() throws Exception {
+        return new MyProduct();
+    }
+
+    @Override
+    public Class<?> getObjectType() {
+        return MyProduct.class;
+    }
+
+    @Override
+    public boolean isSingleton() {
+        return true;  // 返回true表示单例，返回false表示原型
+    }
+}
+
+public class MyProduct {
+    public MyProduct() {
+        System.out.println("MyProduct instance created");
+    }
+
+    public void performTask() {
+        System.out.println("Performing task...");
+    }
+}
+```
+
+配置和使用：
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@ComponentScan
+public class AppConfig {
+}
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        MyProduct myProduct = context.getBean(MyProduct.class);
+        myProduct.performTask();
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
+```
+
+### 比较与选择
+
+1. **普通Bean**：
+ - **使用场景**：适用于大多数情况，尤其是简单的、标准的Java对象。
+ - **优点**：简单、易用，直接由Spring容器管理。
+ - **缺点**：对于复杂对象的创建和初始化可能不够灵活。
+
+2. **工厂Bean**：
+ - **使用场景**：适用于需要复杂创建逻辑或初始化过程的Bean。
+ - **优点**：灵活、可以完全控制Bean的创建过程。
+ - **缺点**：比普通Bean略复杂，需要实现`FactoryBean`接口。
+
+### 总结
+
+在Spring中，普通Bean和工厂Bean各自有不同的设计目的和使用场景。普通Bean适用于大多数简单情况，而工厂Bean提供了一种灵活的机制来创建复杂对象。当你需要完全控制Bean的创建过程或初始化步骤时，工厂Bean是一个很好的选择。通过理解和使用这两种设计模式，可以更好地管理Spring应用中的Bean。
+
+## FactoryBean 的创建时机和加载时机
+在Spring框架中，`FactoryBean`的创建和加载时机是与普通Bean有所不同的。以下是详细说明：
+
+### FactoryBean 的创建和加载时机
+
+1. **FactoryBean 自身的加载时机**：
+ - Spring容器在启动时会解析并实例化所有注册的Bean，包括`FactoryBean`实例。
+ - 当Spring容器初始化时，它会创建并加载所有的`FactoryBean`实例，就像普通Bean一样。这意味着`FactoryBean`实例会在Spring容器启动时被创建。
+
+2. **FactoryBean 创建的目标 Bean 的实例化时机**：
+ - `FactoryBean`创建的目标Bean实例是在第一次访问时（即第一次调用`getObject()`方法时）创建的。这种方式类似于延迟加载（lazy initialization）。
+ - 具体来说，目标Bean实例的创建通常在调用`getBean()`方法获取该Bean时发生。除非特别指定，默认情况下，目标Bean不会在Spring容器启动时就立即创建。
+
+### 示例和解释
+
+以下是一个简单示例，展示了`FactoryBean`和目标Bean的创建和加载时机。
+
+#### 定义 FactoryBean 和目标 Bean
+
+```java
+import org.springframework.beans.factory.FactoryBean;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyFactoryBean implements FactoryBean<MyProduct> {
+    public MyFactoryBean() {
+        System.out.println("MyFactoryBean instance created");
+    }
+
+    @Override
+    public MyProduct getObject() throws Exception {
+        System.out.println("MyProduct instance created");
+        return new MyProduct();
+    }
+
+    @Override
+    public Class<?> getObjectType() {
+        return MyProduct.class;
+    }
+
+    @Override
+    public boolean isSingleton() {
+        return true;
+    }
+}
+
+public class MyProduct {
+    public MyProduct() {
+        System.out.println("MyProduct constructor called");
+    }
+
+    public void performTask() {
+        System.out.println("Performing task...");
+    }
+}
+```
+
+#### 配置和使用
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@ComponentScan
+public class AppConfig {
+}
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+
+        System.out.println("Spring context initialized");
+
+        // 获取目标Bean实例
+        MyProduct myProduct = context.getBean(MyProduct.class);
+        myProduct.performTask();
+
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
+```
+
+#### 运行结果分析
+
+```
+MyFactoryBean instance created
+Spring context initialized
+MyProduct instance created
+MyProduct constructor called
+Performing task...
+```
+
+1. **FactoryBean的加载**：在Spring容器初始化过程中，`MyFactoryBean`实例被创建，并输出"MyFactoryBean instance created"。这表明`FactoryBean`是在Spring容器启动时加载的。
+
+2. **目标Bean的实例化**：在Spring容器初始化完成后，目标Bean `MyProduct` 还没有被创建。只有当调用`context.getBean(MyProduct.class)`获取目标Bean实例时，才会输出"MyProduct instance created"和"MyProduct constructor called"，这表明目标Bean是在第一次访问时才被实例化的。
+
+### FactoryBean 的使用场景
+
+1. **复杂的Bean创建逻辑**：当Bean的创建过程复杂，涉及大量的初始化逻辑时，可以使用`FactoryBean`来封装这些创建逻辑。
+
+2. **条件性Bean创建**：在运行时根据某些条件决定是否创建某个Bean或创建不同的Bean实例。
+
+3. **代理对象的创建**：在需要创建代理对象时，`FactoryBean`非常有用。例如，Spring AOP中使用`ProxyFactoryBean`来创建代理对象。
+
+### 总结
+
+`FactoryBean`自身在Spring容器启动时被加载和创建，而它创建的目标Bean实例则是在第一次访问时才被实例化。这种机制允许开发者延迟目标Bean的创建，提供了更大的灵活性和控制力，适用于复杂的Bean创建场景和代理对象的生成。通过合理使用`FactoryBean`，可以在Spring应用中实现更复杂和高效的依赖注入和Bean管理。
+
+## BeanFactory与FactoryBean的区别?
+`BeanFactory`和`FactoryBean`是Spring框架中两个不同的概念，它们在Spring应用中扮演着不同的角色。以下是它们的区别和各自的用途：
+
+### BeanFactory
+
+#### 定义
+- `BeanFactory`是Spring的基础IoC容器接口。它提供了Spring容器最基本的功能，是所有其他Spring容器的超接口。
+
+#### 特点
+- **基本功能**：提供基本的Bean创建、获取、销毁和管理功能。
+- **懒加载**：默认情况下，`BeanFactory`是懒加载的，这意味着只有在第一次访问Bean时才会创建Bean实例。
+- **低级容器**：`BeanFactory`是一个相对低级的容器，不提供高级功能如事件发布、AOP、国际化等。
+
+#### 示例
+
+```java
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.xml.XmlBeanFactory;
+import org.springframework.core.io.ClassPathResource;
+
+public class MainApp {
+    public static void main(String[] args) {
+        BeanFactory factory = new XmlBeanFactory(new ClassPathResource("beans.xml"));
+        MyBean myBean = (MyBean) factory.getBean("myBean");
+        myBean.doSomething();
+    }
+}
+```
+
+### FactoryBean
+
+#### 定义
+- `FactoryBean`是一个特殊的Bean，用于在Spring容器中创建其他Bean的实例。它通过实现`org.springframework.beans.factory.FactoryBean`接口来定义。
+
+#### 特点
+- **自定义Bean创建逻辑**：`FactoryBean`允许开发者自定义Bean的创建逻辑，这对于复杂的Bean实例化过程非常有用。
+- **代理Bean**：`FactoryBean`常用于创建代理对象，例如在AOP编程中。
+- **延迟初始化**：`FactoryBean`可以控制Bean的创建时机。
+
+#### 方法
+- `getObject()`：返回由`FactoryBean`创建的实例。
+- `getObjectType()`：返回创建实例的类型。
+- `isSingleton()`：返回创建的Bean是否为单例。
+
+#### 示例
+
+```java
+import org.springframework.beans.factory.FactoryBean;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyFactoryBean implements FactoryBean<MyProduct> {
+    @Override
+    public MyProduct getObject() throws Exception {
+        return new MyProduct();
+    }
+
+    @Override
+    public Class<?> getObjectType() {
+        return MyProduct.class;
+    }
+
+    @Override
+    public boolean isSingleton() {
+        return true;
+    }
+}
+
+public class MyProduct {
+    public MyProduct() {
+        System.out.println("MyProduct instance created");
+    }
+
+    public void performTask() {
+        System.out.println("Performing task...");
+    }
+}
+
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@ComponentScan
+public class AppConfig {
+}
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        MyProduct myProduct = context.getBean(MyProduct.class);
+        myProduct.performTask();
+    }
+}
+```
+
+### 区别总结
+
+| 特性 | BeanFactory | FactoryBean |
+| --- | --- | --- |
+| **角色** | 基础IoC容器 | 创建其他Bean的工厂 |
+| **接口** | `org.springframework.beans.factory.BeanFactory` | `org.springframework.beans.factory.FactoryBean` |
+| **主要功能** | 管理和提供Bean实例 | 自定义Bean的创建逻辑 |
+| **懒加载** | 默认懒加载 | 根据实现决定 |
+| **复杂Bean创建** | 通过配置和标准实例化 | 通过自定义逻辑创建Bean |
+| **使用场景** | 基础的Bean管理 | 复杂Bean的创建和代理Bean的生成 |
+
+### 结论
+
+- `BeanFactory`是Spring的核心IoC容器接口，用于基本的Bean管理。
+- `FactoryBean`是一种特殊的Bean，通过实现其接口，开发者可以自定义复杂Bean的创建逻辑。
+
+通过理解这两个概念的区别和用途，开发者可以在Spring应用中更好地管理Bean的生命周期和依赖关系。
+
+##  Bean的作用域
+在Spring框架中，Bean的作用域（Scope）决定了Bean实例的创建和使用方式。Spring支持多种Bean作用域，以满足不同应用场景的需求。以下是Spring中常见的Bean作用域：
+
+### 1. 单例作用域（Singleton）
+
+#### 特点
+- **默认作用域**：在Spring容器中，一个Bean只有一个实例。
+- **应用范围**：适用于无状态的Bean，或需要在整个应用程序中共享的Bean。
+
+#### 示例
+```java
+import org.springframework.stereotype.Component;
+
+@Component
+public class SingletonBean {
+    public SingletonBean() {
+        System.out.println("SingletonBean instance created");
+    }
+}
+```
+
+### 2. 原型作用域（Prototype）
+
+#### 特点
+- **多实例**：每次请求Bean时，都会创建一个新的实例。
+- **应用范围**：适用于有状态的Bean，或需要频繁创建的Bean。
+
+#### 示例
+```java
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
+@Component
+@Scope("prototype")
+public class PrototypeBean {
+    public PrototypeBean() {
+        System.out.println("PrototypeBean instance created");
+    }
+}
+```
+
+### 3. 请求作用域（Request）
+
+#### 特点
+- **每个HTTP请求一个实例**：每个HTTP请求都会创建一个新的Bean实例，适用于Web应用。
+- **应用范围**：适用于Web应用中请求范围内使用的Bean。
+
+#### 示例
+```java
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+import org.springframework.web.context.WebApplicationContext;
+
+@Component
+@Scope(WebApplicationContext.SCOPE_REQUEST)
+public class RequestBean {
+    public RequestBean() {
+        System.out.println("RequestBean instance created");
+    }
+}
+```
+
+### 4. 会话作用域（Session）
+
+#### 特点
+- **每个HTTP会话一个实例**：每个HTTP会话都会创建一个新的Bean实例，适用于Web应用。
+- **应用范围**：适用于Web应用中会话范围内使用的Bean。
+
+#### 示例
+```java
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+import org.springframework.web.context.WebApplicationContext;
+
+@Component
+@Scope(WebApplicationContext.SCOPE_SESSION)
+public class SessionBean {
+    public SessionBean() {
+        System.out.println("SessionBean instance created");
+    }
+}
+```
+
+### 5. 全局会话作用域（Global Session）
+
+#### 特点
+- **每个全局HTTP会话一个实例**：主要用于Portlet应用，每个全局会话创建一个实例。
+- **应用范围**：适用于Portlet环境中全局会话范围内使用的Bean。
+
+#### 示例
+```java
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+import org.springframework.web.context.WebApplicationContext;
+
+@Component
+@Scope(WebApplicationContext.SCOPE_GLOBAL_SESSION)
+public class GlobalSessionBean {
+    public GlobalSessionBean() {
+        System.out.println("GlobalSessionBean instance created");
+    }
+}
+```
+
+### 6. 应用程序作用域（Application）
+
+#### 特点
+- **每个ServletContext一个实例**：在整个ServletContext范围内创建一个实例。
+- **应用范围**：适用于Web应用中全局范围内使用的Bean。
+
+#### 示例
+```java
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+import org.springframework.web.context.WebApplicationContext;
+
+@Component
+@Scope(WebApplicationContext.SCOPE_APPLICATION)
+public class ApplicationBean {
+    public ApplicationBean() {
+        System.out.println("ApplicationBean instance created");
+    }
+}
+```
+
+### 7. 自定义作用域
+
+#### 特点
+- **自定义的Bean生命周期管理**：用户可以定义自己的Bean作用域。
+- **应用范围**：适用于需要特殊生命周期管理的Bean。
+
+#### 示例
+
+创建自定义作用域：
+
+```java
+import org.springframework.beans.factory.ObjectFactory;
+import org.springframework.beans.factory.config.Scope;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class CustomScope implements Scope {
+    private Map<String, Object> scopedObjects = new HashMap<>();
+
+    @Override
+    public Object get(String name, ObjectFactory<?> objectFactory) {
+        return scopedObjects.computeIfAbsent(name, k -> objectFactory.getObject());
+    }
+
+    @Override
+    public Object remove(String name) {
+        return scopedObjects.remove(name);
+    }
+
+    @Override
+    public void registerDestructionCallback(String name, Runnable callback) {
+        // Custom destruction logic
+    }
+
+    @Override
+    public Object resolveContextualObject(String key) {
+        return null;
+    }
+
+    @Override
+    public String getConversationId() {
+        return "custom";
+    }
+}
+```
+
+注册自定义作用域：
+
+```java
+import org.springframework.beans.factory.config.CustomScopeConfigurer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+    @Bean
+    public static CustomScopeConfigurer customScopeConfigurer() {
+        CustomScopeConfigurer configurer = new CustomScopeConfigurer();
+        configurer.addScope("custom", new CustomScope());
+        return configurer;
+    }
+}
+```
+
+使用自定义作用域：
+
+```java
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
+@Component
+@Scope("custom")
+public class CustomScopeBean {
+    public CustomScopeBean() {
+        System.out.println("CustomScopeBean instance created");
+    }
+}
+```
+
+### 总结
+
+Spring提供了多种Bean作用域，以满足不同应用场景的需求。从默认的单例作用域到多实例的原型作用域，再到Web应用中常用的请求、会话、全局会话和应用程序作用域，以及自定义作用域，开发者可以根据具体需求选择合适的作用域来管理Bean的生命周期和实例化方式。通过合理使用这些作用域，可以实现更加灵活和高效的应用设计。
+
+# IOC基础-Bean的实例化方式
+在Spring框架中，有多种方式可以实例化Bean。不同的实例化方式可以根据实际需求选择合适的方法。以下是Spring中常见的Bean实例化方式：
+
+### 1. 普通Bean实例化
+
+这是最常见的方式，直接通过Spring容器进行管理和实例化。
+
+#### 示例
+
+使用注解配置：
+
+```java
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyBean {
+    public MyBean() {
+        System.out.println("MyBean instance created");
+    }
+
+    public void doSomething() {
+        System.out.println("Doing something...");
+    }
+}
+```
+
+使用XML配置：
+
+```xml
+<bean id="myBean" class="com.example.MyBean"/>
+```
+
+### 2. 借助FactoryBean创建Bean
+
+`FactoryBean`是一种特殊的Bean，用于创建复杂或延迟初始化的Bean实例。
+
+#### 示例
+
+定义FactoryBean：
+
+```java
+import org.springframework.beans.factory.FactoryBean;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyFactoryBean implements FactoryBean<MyProduct> {
+    @Override
+    public MyProduct getObject() throws Exception {
+        return new MyProduct();
+    }
+
+    @Override
+    public Class<?> getObjectType() {
+        return MyProduct.class;
+    }
+
+    @Override
+    public boolean isSingleton() {
+        return true; // 返回true表示单例，返回false表示原型
+    }
+}
+
+public class MyProduct {
+    public MyProduct() {
+        System.out.println("MyProduct instance created");
+    }
+
+    public void performTask() {
+        System.out.println("Performing task...");
+    }
+}
+```
+
+配置和使用：
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@ComponentScan
+public class AppConfig {
+}
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        MyProduct myProduct = context.getBean(MyProduct.class);
+        myProduct.performTask();
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
+```
+
+### 3. 借助静态工厂创建Bean
+
+通过静态工厂方法创建Bean实例。这种方式适用于需要自定义Bean实例化逻辑的情况。
+在Spring框架中，通过静态工厂方法创建Bean实例时，静态工厂本身并不是一个Spring Bean。它只是包含静态工厂方法的一个普通Java类。Spring容器会调用这个静态工厂方法来创建Bean实例，但不会将静态工厂类本身作为一个Bean来管理。
+
+#### 示例
+
+定义静态工厂：
+
+```java
+public class StaticFactory {
+    public static MyBean createInstance() {
+        return new MyBean();
+    }
+}
+
+public class MyBean {
+    public MyBean() {
+        System.out.println("MyBean instance created");
+    }
+
+    public void doSomething() {
+        System.out.println("Doing something...");
+    }
+}
+
+```
+使用注解配置：
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+
+ @Bean
+ public MyBean myBean() {
+  return StaticFactory.createInstance();
+ }
+}
+
+```
+
+使用XML配置：
+
+```xml
+<bean id="myBean" class="com.example.StaticFactory" factory-method="createInstance"/>
+```
+
+### 4. 借助实例工厂创建Bean
+
+通过实例工厂方法创建Bean实例。这种方式适用于需要依赖于实例工厂类的情况。
+
+#### 示例
+
+定义实例工厂：
+
+```java
+public class InstanceFactory {
+    public MyBean createInstance() {
+        return new MyBean();
+    }
+}
+
+public class MyBean {
+    public MyBean() {
+        System.out.println("MyBean instance created");
+    }
+
+    public void doSomething() {
+        System.out.println("Doing something...");
+    }
+}
+```
+
+使用XML配置：
+
+```xml
+<bean id="instanceFactory" class="com.example.InstanceFactory"/>
+<bean id="myBean" factory-bean="instanceFactory" factory-method="createInstance"/>
+```
+
+### 总结
+
+通过理解和使用这些不同的Bean实例化方式，开发者可以更灵活地管理Bean的创建过程，以满足不同的应用需求。无论是直接通过Spring容器实例化Bean，还是使用`FactoryBean`、静态工厂或实例工厂方法，都可以实现对Bean实例化过程的细粒度控制。
