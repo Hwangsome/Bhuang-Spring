@@ -2084,3 +2084,636 @@ public class MyBean {
 ### 总结
 
 通过理解和使用这些不同的Bean实例化方式，开发者可以更灵活地管理Bean的创建过程，以满足不同的应用需求。无论是直接通过Spring容器实例化Bean，还是使用`FactoryBean`、静态工厂或实例工厂方法，都可以实现对Bean实例化过程的细粒度控制。
+
+# Bean的生命周期-初始化与销毁
+一个对象从被创建，到被垃圾回收，可以宏观的划分为 5 个阶段：
+
+- 创建 / 实例化阶段：此时会调用类的构造方法，产生一个新的对象
+- 初始化阶段：此时对象已经创建好，但还没有被正式使用，可能这里面需要做一些额外的操作（如预初始化数据库的连接池）
+- 运行使用期：此时对象已经完全初始化好，程序正常运行，对象被使用
+- 销毁阶段：此时对象准备被销毁，已不再使用，需要预先的把自身占用的资源等处理好（如关闭、释放数据库连接）
+- 回收阶段：此时对象已经完全没有被引用了，被垃圾回收器回收
+
+## init-method&destroy-method
+在Spring框架中，Bean的生命周期中是先对属性赋值，然后执行`init-method`标记的方法。我们可以通过Java配置和注解来管理Bean的生命周期，而不使用XML配置。以下是一个完整的示例，以`Dog`类为例，展示如何在Bean的生命周期中进行属性赋值并执行初始化和销毁方法。
+
+### 定义`Dog`类
+
+```java
+public class Dog {
+    
+    private String name;
+    
+    public Dog() {
+        System.out.println("Dog instance created");
+    }
+
+    // Setter for name
+    public void setName(String name) {
+        this.name = name;
+        System.out.println("Property name set to: " + name);
+    }
+
+    // Initialization method
+    public void init() {
+        System.out.println("Dog initialized");
+    }
+
+    // Destruction method
+    public void destroy() {
+        System.out.println("Dog destroyed");
+    }
+
+    public void bark() {
+        System.out.println(name + " says: Woof! Woof!");
+    }
+}
+```
+
+### 使用Java配置类指定初始化和销毁方法
+
+#### Java配置类
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+    
+    @Bean(initMethod = "init", destroyMethod = "destroy")
+    public Dog dog() {
+        Dog dog = new Dog();
+        dog.setName("Buddy");  // Setting property
+        return dog;
+    }
+}
+```
+
+### 使用示例
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        
+        Dog dog = context.getBean(Dog.class);
+        dog.bark();
+        
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
+```
+
+### 使用`@PostConstruct`和`@PreDestroy`注解
+
+除了使用`@Bean`注解的`initMethod`和`destroyMethod`属性，我们还可以使用`@PostConstruct`和`@PreDestroy`注解来标记初始化和销毁方法。
+
+#### 修改`Dog`类
+
+```java
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+
+public class Dog {
+    
+    private String name;
+    
+    public Dog() {
+        System.out.println("Dog instance created");
+    }
+
+    // Setter for name
+    public void setName(String name) {
+        this.name = name;
+        System.out.println("Property name set to: " + name);
+    }
+
+    // Initialization method
+    @PostConstruct
+    public void init() {
+        System.out.println("Dog initialized");
+    }
+
+    // Destruction method
+    @PreDestroy
+    public void destroy() {
+        System.out.println("Dog destroyed");
+    }
+
+    public void bark() {
+        System.out.println(name + " says: Woof! Woof!");
+    }
+}
+```
+
+#### 修改Java配置类
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+    
+    @Bean
+    public Dog dog() {
+        Dog dog = new Dog();
+        dog.setName("Buddy");  // Setting property
+        return dog;
+    }
+}
+```
+
+### 使用示例
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        
+        Dog dog = context.getBean(Dog.class);
+        dog.bark();
+        
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
+```
+
+### 运行结果
+
+执行上述示例程序后，控制台输出如下：
+
+#### 使用`@Bean`的`initMethod`和`destroyMethod`属性运行结果
+
+```
+Dog instance created
+Property name set to: Buddy
+Dog initialized
+Buddy says: Woof! Woof!
+Dog destroyed
+```
+
+#### 使用`@PostConstruct`和`@PreDestroy`注解运行结果
+
+```
+Dog instance created
+Property name set to: Buddy
+Dog initialized
+Buddy says: Woof! Woof!
+Dog destroyed
+```
+
+### 总结
+
+在Spring框架中，Bean的生命周期包括实例化、属性赋值、初始化和销毁。我们可以通过Java配置和注解来管理这些生命周期阶段。在示例中，通过`@Bean`的`initMethod`和`destroyMethod`属性，以及`@PostConstruct`和`@PreDestroy`注解，展示了如何在Bean生命周期的不同阶段执行自定义逻辑。这些机制提供了灵活和强大的方式来管理Bean的初始化和销毁过程。
+
+## @PostConstruct 与 @PreDestroy
+在Spring框架中，`@PostConstruct`和`@PreDestroy`注解用于在Bean的生命周期中执行初始化和销毁方法。`@PostConstruct`在Bean的依赖注入完成后调用，而`@PreDestroy`在Bean被销毁之前调用。这些注解简化了初始化和销毁方法的配置，避免了在XML或Java配置中显式指定初始化和销毁方法。
+
+### `@PostConstruct`注解
+
+`@PostConstruct`注解用于标记一个方法，该方法会在Bean的依赖注入完成后立即执行。这通常用于执行任何初始化工作。
+
+#### 示例
+
+```java
+import javax.annotation.PostConstruct;
+
+public class Dog {
+    
+    private String name;
+    
+    public Dog() {
+        System.out.println("Dog instance created");
+    }
+
+    public void setName(String name) {
+        this.name = name;
+        System.out.println("Property name set to: " + name);
+    }
+
+    @PostConstruct
+    public void init() {
+        System.out.println("Dog initialized");
+    }
+
+    public void bark() {
+        System.out.println(name + " says: Woof! Woof!");
+    }
+}
+```
+
+### `@PreDestroy`注解
+
+`@PreDestroy`注解用于标记一个方法，该方法会在Spring容器销毁Bean之前调用。这通常用于释放资源或执行清理工作。
+
+#### 示例
+
+```java
+import javax.annotation.PreDestroy;
+
+public class Dog {
+    
+    private String name;
+    
+    public Dog() {
+        System.out.println("Dog instance created");
+    }
+
+    public void setName(String name) {
+        this.name = name;
+        System.out.println("Property name set to: " + name);
+    }
+
+    @PostConstruct
+    public void init() {
+        System.out.println("Dog initialized");
+    }
+
+    @PreDestroy
+    public void destroy() {
+        System.out.println("Dog destroyed");
+    }
+
+    public void bark() {
+        System.out.println(name + " says: Woof! Woof!");
+    }
+}
+```
+
+### Java配置类
+
+在Java配置类中，我们只需定义Bean，不需要显式指定初始化和销毁方法，因为它们已经通过注解标记。
+
+#### Java配置类示例
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+    
+    @Bean
+    public Dog dog() {
+        Dog dog = new Dog();
+        dog.setName("Buddy");  // Setting property
+        return dog;
+    }
+}
+```
+
+### 使用示例
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        
+        Dog dog = context.getBean(Dog.class);
+        dog.bark();
+        
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
+```
+
+### 运行结果
+
+执行上述示例程序后，控制台输出如下：
+
+```
+Dog instance created
+Property name set to: Buddy
+Dog initialized
+Buddy says: Woof! Woof!
+Dog destroyed
+```
+
+### 总结
+
+`@PostConstruct`和`@PreDestroy`注解提供了一种简单而优雅的方式来管理Spring Bean的初始化和销毁过程。这些注解避免了在XML或Java配置中显式指定初始化和销毁方法的需要，使代码更简洁和易于维护。
+
+- `@PostConstruct`：在Bean的依赖注入完成后立即调用，通常用于执行任何初始化工作。
+- `@PreDestroy`：在Spring容器销毁Bean之前调用，通常用于释放资源或执行清理工作。
+
+通过使用这些注解，开发者可以更加方便地管理Bean的生命周期，并确保在适当的时机执行必要的初始化和清理操作。
+
+## InitializingBean&DisposableBean
+在Spring框架中，`InitializingBean`和`DisposableBean`接口提供了另一种方式来管理Bean的初始化和销毁过程。实现这些接口的Bean可以在生命周期的特定阶段执行自定义逻辑。
+
+### `InitializingBean`接口
+
+`InitializingBean`接口用于在Bean的属性设置完成后执行自定义初始化逻辑。它包含一个方法`afterPropertiesSet()`，该方法会在依赖注入完成后被调用。
+
+#### 示例
+
+```java
+import org.springframework.beans.factory.InitializingBean;
+
+public class Dog implements InitializingBean {
+    
+    private String name;
+    
+    public Dog() {
+        System.out.println("Dog instance created");
+    }
+
+    public void setName(String name) {
+        this.name = name;
+        System.out.println("Property name set to: " + name);
+    }
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        System.out.println("Dog initialized");
+    }
+
+    public void bark() {
+        System.out.println(name + " says: Woof! Woof!");
+    }
+}
+```
+
+### `DisposableBean`接口
+
+`DisposableBean`接口用于在Spring容器销毁Bean之前执行自定义销毁逻辑。它包含一个方法`destroy()`，该方法会在Bean销毁之前被调用。
+
+#### 示例
+
+```java
+import org.springframework.beans.factory.DisposableBean;
+
+public class Dog implements DisposableBean {
+    
+    private String name;
+    
+    public Dog() {
+        System.out.println("Dog instance created");
+    }
+
+    public void setName(String name) {
+        this.name = name;
+        System.out.println("Property name set to: " + name);
+    }
+
+    @Override
+    public void destroy() throws Exception {
+        System.out.println("Dog destroyed");
+    }
+
+    public void bark() {
+        System.out.println(name + " says: Woof! Woof!");
+    }
+}
+```
+
+### 综合示例
+
+下面是一个实现了`InitializingBean`和`DisposableBean`接口的`Dog`类，同时包含Java配置类来展示如何使用这些接口。
+
+#### 定义`Dog`类
+
+```java
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.DisposableBean;
+
+public class Dog implements InitializingBean, DisposableBean {
+    
+    private String name;
+    
+    public Dog() {
+        System.out.println("Dog instance created");
+    }
+
+    public void setName(String name) {
+        this.name = name;
+        System.out.println("Property name set to: " + name);
+    }
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        System.out.println("Dog initialized");
+    }
+
+    @Override
+    public void destroy() throws Exception {
+        System.out.println("Dog destroyed");
+    }
+
+    public void bark() {
+        System.out.println(name + " says: Woof! Woof!");
+    }
+}
+```
+
+#### Java配置类
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+    
+    @Bean
+    public Dog dog() {
+        Dog dog = new Dog();
+        dog.setName("Buddy");  // Setting property
+        return dog;
+    }
+}
+```
+
+#### 使用示例
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        
+        Dog dog = context.getBean(Dog.class);
+        dog.bark();
+        
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
+```
+
+### 运行结果
+
+执行上述示例程序后，控制台输出如下：
+
+```
+Dog instance created
+Property name set to: Buddy
+Dog initialized
+Buddy says: Woof! Woof!
+Dog destroyed
+```
+
+### 总结
+
+`InitializingBean`和`DisposableBean`接口提供了通过实现接口方法来管理Bean初始化和销毁的另一种方式：
+
+- **`InitializingBean`接口**：通过实现`afterPropertiesSet()`方法，在Bean的属性设置完成后执行初始化逻辑。
+- **`DisposableBean`接口**：通过实现`destroy()`方法，在Spring容器销毁Bean之前执行清理逻辑。
+
+与`@PostConstruct`和`@PreDestroy`注解相比，`InitializingBean`和`DisposableBean`接口的方式更加显式和强类型检查，适合那些需要在初始化和销毁时执行复杂逻辑的Bean。两者可以根据实际需求灵活使用，以便在Bean生命周期的特定阶段执行所需的操作。
+
+## 三种生命周期并存 执行顺序
+在Spring框架中，如果同时使用了`@PostConstruct`和`@PreDestroy`注解、`InitializingBean`和`DisposableBean`接口，以及`@Bean`注解的`initMethod`和`destroyMethod`属性来管理Bean的生命周期，Spring会按照一定的顺序执行这些方法。
+
+### 初始化方法的执行顺序
+
+1. **`@PostConstruct` 注解的方法**
+2. **`InitializingBean`接口的`afterPropertiesSet()`方法**
+3. **`@Bean`注解的`initMethod`属性指定的方法**
+
+### 销毁方法的执行顺序
+
+1. **`@PreDestroy` 注解的方法**
+2. **`DisposableBean`接口的`destroy()`方法**
+3. **`@Bean`注解的`destroyMethod`属性指定的方法**
+
+### 示例
+
+我们以`Dog`类为例，展示同时使用这三种机制时的执行顺序。
+
+#### 定义`Dog`类
+
+```java
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.DisposableBean;
+
+public class Dog implements InitializingBean, DisposableBean {
+    
+    private String name;
+
+    public Dog() {
+        System.out.println("Dog instance created");
+    }
+
+    public void setName(String name) {
+        this.name = name;
+        System.out.println("Property name set to: " + name);
+    }
+
+    @PostConstruct
+    public void postConstruct() {
+        System.out.println("Dog @PostConstruct method called");
+    }
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        System.out.println("Dog afterPropertiesSet method called");
+    }
+
+    public void customInit() {
+        System.out.println("Dog custom init-method called");
+    }
+
+    @PreDestroy
+    public void preDestroy() {
+        System.out.println("Dog @PreDestroy method called");
+    }
+
+    @Override
+    public void destroy() throws Exception {
+        System.out.println("Dog destroy method called");
+    }
+
+    public void customDestroy() {
+        System.out.println("Dog custom destroy-method called");
+    }
+
+    public void bark() {
+        System.out.println(name + " says: Woof! Woof!");
+    }
+}
+```
+
+#### Java配置类
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+    
+    @Bean(initMethod = "customInit", destroyMethod = "customDestroy")
+    public Dog dog() {
+        Dog dog = new Dog();
+        dog.setName("Buddy");  // Setting property
+        return dog;
+    }
+}
+```
+
+#### 使用示例
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class MainApp {
+    public static void main(String[] args) {
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        
+        Dog dog = context.getBean(Dog.class);
+        dog.bark();
+        
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
+```
+
+### 运行结果
+
+执行上述示例程序后，控制台输出如下：
+
+```
+Dog instance created
+Property name set to: Buddy
+Dog @PostConstruct method called
+Dog afterPropertiesSet method called
+Dog custom init-method called
+Buddy says: Woof! Woof!
+Dog @PreDestroy method called
+Dog destroy method called
+Dog custom destroy-method called
+```
+
+### 总结
+
+在Bean的生命周期中，如果同时使用了`@PostConstruct`和`@PreDestroy`注解、`InitializingBean`和`DisposableBean`接口，以及`@Bean`注解的`initMethod`和`destroyMethod`属性，Spring会按照以下顺序执行这些方法：
+
+#### 初始化顺序：
+
+1. **`@PostConstruct`**：首先执行标记了`@PostConstruct`注解的方法。
+2. **`afterPropertiesSet`**：然后执行实现了`InitializingBean`接口的`afterPropertiesSet()`方法。
+3. **`initMethod`**：最后执行`@Bean`注解中指定的`initMethod`方法。
+
+#### 销毁顺序：
+
+1. **`@PreDestroy`**：首先执行标记了`@PreDestroy`注解的方法。
+2. **`destroy`**：然后执行实现了`DisposableBean`接口的`destroy()`方法。
+3. **`destroyMethod`**：最后执行`@Bean`注解中指定的`destroyMethod`方法。
+
+这种顺序确保了Bean在生命周期的每个阶段都可以执行自定义的初始化和销毁逻辑，从而提供了极大的灵活性。
