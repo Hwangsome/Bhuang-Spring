@@ -2717,3 +2717,20 @@ Dog custom destroy-method called
 3. **`destroyMethod`**：最后执行`@Bean`注解中指定的`destroyMethod`方法。
 
 这种顺序确保了Bean在生命周期的每个阶段都可以执行自定义的初始化和销毁逻辑，从而提供了极大的灵活性。
+
+### BeanProcessor
+```java
+public interface BeanPostProcessor {
+   // 这个方法就是上面几种初始化方法执行之前执行的
+    @Nullable
+    default Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+        return bean;
+    }
+
+    // 这个方法是 上面的几种初始化方法执行之后执行的， 表示初始化完成了
+    @Nullable
+    default Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+        return bean;
+    }
+}
+```

@@ -18,6 +18,9 @@ class UserEntityTest {
     @Autowired
     lateinit var personEntity: PersonEntity
 
+    @Autowired
+    lateinit var testBean: TestBean
+
     // 在 Spring 中使用集合类型（如 List、Set 或 Map）来接收多个相同类型的 Bean。使用 List 或 Set 可以简单地接收所有相同类型的 Bean
     @Autowired
     lateinit var teachers: List<TeacherEntity>
@@ -50,5 +53,7 @@ class UserEntityTest {
             println("Key: $key, Value: ${value.name}")
         }
 
+
+        println(testBean.name)
     }
 }
