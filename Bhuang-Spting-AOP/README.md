@@ -1557,7 +1557,270 @@ public class UserServiceImpl implements UserService {
 }
 ```
 
+#### Spring aop中的 @EnableAspectJAutoProxy exposeProxy的作用
+`@EnableAspectJAutoProxy` 是 Spring AOP 中的一个注解，用于启用基于 AspectJ 的自动代理功能。在使用 AOP 时，Spring 自动为标记了切面的类生成代理，以便在方法调用时能够正确地执行切面逻辑。这个注解提供了一个可选的 `exposeProxy` 属性，它在某些高级场景下非常有用。
+
+### `@EnableAspectJAutoProxy` 注解
+
+- **基本作用**：`@EnableAspectJAutoProxy` 用于启用基于 AspectJ 的 AOP 代理。Spring AOP 通过代理对象拦截方法调用，并在适当的时候应用切面逻辑。
+
+- **典型使用**：你可以在 Spring 配置类上使用这个注解，以便在应用程序中启用 AOP 功能。
+
+### `exposeProxy` 属性
+
+- **作用**：`exposeProxy` 属性用于控制是否在当前线程中公开代理对象。当设置为 `true` 时，Spring 会在当前线程的 `ThreadLocal` 中暴露当前代理对象，这使得你可以在同一个类内部的方法调用中访问到代理对象，并通过它触发切面逻辑。
+
+- **默认值**：`exposeProxy` 的默认值是 `false`，即代理对象不会在 `ThreadLocal` 中公开。
+
+- **设置为 `true` 的场景**：
+   - **自调用**：当一个类的方法调用该类的另一个方法时，通常不会触发 AOP，因为 AOP 依赖于代理对象，而在自调用时，调用的是同一个类的普通方法，而不是代理对象的方法。如果你想在这种情况下触发 AOP，需要设置 `exposeProxy = true`，并使用 `AopContext.currentProxy()` 来获取当前的代理对象。
+   - **事务管理**：在事务管理场景中，如果一个事务性方法调用同一个类中的另一个事务性方法，也可能需要触发事务管理逻辑，此时可以使用 `exposeProxy`。
+
+### 使用示例
+
+假设有一个服务类 `MyService`，其中两个方法 `methodA` 和 `methodB` 都有切面逻辑。`methodA` 调用 `methodB` 时，想要触发 `methodB` 的切面逻辑，你可以使用 `exposeProxy`。
+
+**配置类**
+
+```java
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
+
+@Configuration
+@EnableAspectJAutoProxy(exposeProxy = true)
+public class AppConfig {
+    // 其他 Bean 配置
+}
+```
+
+**服务类**
+
+```java
+import org.springframework.aop.framework.AopContext;
+import org.springframework.stereotype.Service;
+
+@Service
+public class MyService {
+
+    public void methodA() {
+        System.out.println("Inside methodA");
+        // 通过代理对象调用 methodB 以触发 AOP
+        ((MyService) AopContext.currentProxy()).methodB();
+    }
+
+    public void methodB() {
+        System.out.println("Inside methodB");
+    }
+}
+```
+
+**切面类**
+
+```java
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.springframework.stereotype.Component;
+
+@Aspect
+@Component
+public class MyAspect {
+
+    @Before("execution(* com.example.MyService.methodB(..))")
+    public void beforeMethodB() {
+        System.out.println("Before methodB");
+    }
+}
+```
+
+### 运行结果
+
+当 `methodA` 调用 `methodB` 时，由于 `exposeProxy` 设置为 `true`，`methodB` 的切面逻辑将会触发：
+
+```
+Inside methodA
+Before methodB
+Inside methodB
+```
+
+### 总结
+
+- **`@EnableAspectJAutoProxy`**：用于启用基于 AspectJ 的自动代理功能。
+- **`exposeProxy = true`**：在 `ThreadLocal` 中暴露当前代理对象，以便在同类自调用时使用代理对象触发 AOP 逻辑。
+- **典型场景**：主要用于需要在类的内部方法调用中触发 AOP 切面逻辑的场景，如事务管理、自调用等。
+
+使用 `exposeProxy` 时要注意性能和复杂性，因为这会略微增加代理的开销和代码的复杂度。
+
+#### 使用ApplicationContextAware获取代理对象
+是的，你可以使用 `ApplicationContextAware` 接口来获取 `ApplicationContext`，然后通过 `ApplicationContext` 获取当前类的代理对象，从而实现同类内部方法调用时触发 AOP 逻辑的效果。这种方法是另一种替代使用 `exposeProxy` 属性的方式。
+
+### 使用 `ApplicationContextAware` 实现 AOP 代理对象的获取
+
+以下是如何通过实现 `ApplicationContextAware` 接口来获取当前类的代理对象的步骤和示例代码。
+
+### 1. 实现 `ApplicationContextAware` 接口
+
+首先，在你的服务类中实现 `ApplicationContextAware` 接口，以便获取 `ApplicationContext`。
+
+**服务类**
+
+```java
+import org.springframework.aop.framework.AopProxyUtils;
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.stereotype.Service;
+
+@Service
+public class MyService implements ApplicationContextAware {
+
+    private ApplicationContext applicationContext;
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.applicationContext = applicationContext;
+    }
+
+    public void methodA() {
+        System.out.println("Inside methodA");
+
+        // 从 ApplicationContext 获取代理对象
+        MyService proxy = (MyService) applicationContext.getBean(MyService.class);
+        proxy.methodB();
+    }
+
+    public void methodB() {
+        System.out.println("Inside methodB");
+    }
+}
+```
+
+### 2. 配置切面类
+
+保持切面类不变，确保在 `methodB` 调用时触发 AOP 逻辑。
+
+**切面类**
+
+```java
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.springframework.stereotype.Component;
+
+@Aspect
+@Component
+public class MyAspect {
+
+    @Before("execution(* com.example.MyService.methodB(..))")
+    public void beforeMethodB() {
+        System.out.println("Before methodB");
+    }
+}
+```
+
+### 3. 运行结果
+
+当你运行 `methodA` 时，通过 `ApplicationContext` 获取的 `MyService` 代理对象调用 `methodB`，会触发 AOP 切面逻辑。
+
+**控制台输出**：
+
+```
+Inside methodA
+Before methodB
+Inside methodB
+```
+
+### 总结
+
+- **`ApplicationContextAware` 实现**：通过实现 `ApplicationContextAware` 接口，获取 `ApplicationContext`，然后通过 `ApplicationContext` 获取当前类的代理对象，实现类内部方法调用时触发 AOP 逻辑。
+
+- **代理对象的使用**：这种方式的核心是通过 `applicationContext.getBean(MyService.class)` 获取当前类的代理对象，并在同类内部调用时使用该代理对象。
+
+- **与 `exposeProxy` 的比较**：使用 `ApplicationContextAware` 的方式不需要 `exposeProxy`，但需要通过上下文获取代理对象，这可能稍微增加代码的复杂性。`exposeProxy` 则是通过 `ThreadLocal` 机制直接访问当前代理对象，适用于一些性能敏感的场景。
+
+这种方法在复杂的 Spring 应用中可能更灵活，因为它允许你在不同的上下文中使用代理对象，尤其是在没有直接使用 `AopContext.currentProxy()` 的情况下。
+
 通过以上解决方法，代理对象调用自身方法时，切面依然能够生效，确保日志记录等切面逻辑正确执行。
+
+#### 为什么我实现了ApplicationContextAware 就可以拿到ApplicationContext？
+当你实现了 `ApplicationContextAware` 接口时，Spring 会自动将 `ApplicationContext` 注入到你的 Bean 中。这是因为 Spring 框架内部有一个 `ApplicationContextAwareProcessor`，它负责检测并处理实现了 `ApplicationContextAware` 接口的 Bean。
+
+### 1. `ApplicationContextAware` 接口
+
+`ApplicationContextAware` 是 Spring 的一个标记接口，定义了一个 `setApplicationContext(ApplicationContext applicationContext)` 方法。实现这个接口的任何 Spring Bean 都会在初始化时获得一个 `ApplicationContext` 实例。
+
+- **接口定义**：
+  ```java
+  public interface ApplicationContextAware {
+      void setApplicationContext(ApplicationContext applicationContext) throws BeansException;
+  }
+  ```
+
+- **作用**：实现该接口的类可以在 Spring 容器启动时获取 `ApplicationContext` 实例。这使得你的类能够访问 Spring 上下文中的其他 Bean 或使用 Spring 的功能。
+
+### 2. `ApplicationContextAwareProcessor`
+
+`ApplicationContextAwareProcessor` 是 Spring 的一个内部处理器，它的作用是在 Spring 容器初始化 Bean 时，检测是否实现了 `ApplicationContextAware` 或其他类似的 Aware 接口（如 `BeanNameAware`、`BeanFactoryAware` 等），如果实现了这些接口，它会在 Bean 初始化过程中调用相应的方法。
+
+- **内部工作原理**：
+
+   - 当 Spring 容器创建和初始化 Bean 时，`ApplicationContextAwareProcessor` 会检查该 Bean 是否实现了 `ApplicationContextAware` 接口。
+   - 如果实现了 `ApplicationContextAware` 接口，Spring 会调用 `setApplicationContext` 方法，将 `ApplicationContext` 实例传递给该 Bean。
+
+- **简化流程**：
+
+   1. **Bean 定义加载**：Spring 从配置文件或注解中加载 Bean 定义。
+   2. **Bean 实例化**：Spring 创建 Bean 的实例。
+   3. **`ApplicationContextAwareProcessor` 处理**：在 Bean 初始化过程中，Spring 检测 Bean 是否实现了 `ApplicationContextAware` 接口。如果是，调用 `setApplicationContext` 方法，注入 `ApplicationContext`。
+   4. **Bean 初始化完成**：Spring 完成其他 Bean 初始化过程（例如依赖注入、调用 `InitializingBean` 等）。
+
+- **关键代码**：
+
+  `ApplicationContextAwareProcessor` 主要的工作发生在其 `postProcessBeforeInitialization` 方法中：
+
+  ```java
+  public Object postProcessBeforeInitialization(Object bean, String beanName) {
+      if (bean instanceof ApplicationContextAware) {
+          ((ApplicationContextAware) bean).setApplicationContext(this.applicationContext);
+      }
+      return bean;
+  }
+  ```
+
+  这个方法会在 Bean 初始化之前被调用，将 `ApplicationContext` 注入给实现了 `ApplicationContextAware` 接口的 Bean。
+
+### 3. 使用 `ApplicationContextAware` 的示例
+
+通过实现 `ApplicationContextAware`，你可以在任何 Spring Bean 中获取 `ApplicationContext`，例如：
+
+```java
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyService implements ApplicationContextAware {
+
+    private ApplicationContext applicationContext;
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.applicationContext = applicationContext;
+    }
+
+    public void doSomething() {
+        // 使用 applicationContext 获取其他 Bean 或执行其他操作
+        MyOtherService myOtherService = applicationContext.getBean(MyOtherService.class);
+        myOtherService.performTask();
+    }
+}
+```
+
+### 4. 总结
+
+- **为什么可以获取 `ApplicationContext`**：因为 Spring 在创建和初始化 Bean 时，通过 `ApplicationContextAwareProcessor` 处理器自动检测实现了 `ApplicationContextAware` 接口的 Bean，并在初始化过程中将 `ApplicationContext` 注入到 Bean 中。
+
+- **`ApplicationContextAwareProcessor` 的作用**：该处理器确保所有实现了 `ApplicationContextAware` 接口的 Bean 都能够在初始化时获得 `ApplicationContext`，从而能够在运行时访问 Spring 容器中的其他 Bean 或资源。
+
+这种机制使得 Spring 的依赖注入更加灵活，允许 Bean 在初始化时动态获取和使用 Spring 容器中的其他组件。
 
 ## AOP实现事务控制
 
