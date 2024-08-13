@@ -46,4 +46,21 @@ class UserControllerTest  {
             .andExpect(status().isOk())
             .andExpect(content().string("User added"))
     }
+
+    @Test
+    fun testAddUserByTestPropagation() {
+        val john =  UserEntity().apply {
+            name = "John Doe"
+            age = 30
+            email = "john@email.com"
+        }
+        whenever(userService.addUserByTestPropagation(john)).thenReturn(1)
+        mockMvc.perform(
+            post("/addUserByTestPropagation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ObjectMapper().writeValueAsString(john))
+        )
+            .andExpect(status().isOk())
+            .andExpect(content().string("User added"))
+    }
 }
